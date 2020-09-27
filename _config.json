@@ -1,0 +1,12 @@
+{
+    "mail_settings": {
+    "DEBUG": true,
+	"MAIL_SERVER":"",
+	"MAIL_PORT": 465,
+    "MAIL_USE_TLS": false,
+	"MAIL_USE_SSL": true,
+    "MAIL_USERNAME": "",
+    "MAIL_DEFAULT_SENDER": "",
+	"MAIL_PASSWORD": ""
+    }
+}

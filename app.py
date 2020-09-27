@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, g, abort # Импортируем библиотеки для работы Flaskimport json # Модуль для создания json
+from flask import Flask, request, jsonify, g, abort, render_template, url_for # Импортируем библиотеки для работы Flaskimport json # Модуль для создания json
 from flask_mail import Mail, Message
 from flask_httpauth import HTTPBasicAuth # Импортируем библиотеку для автоматизации авторизации пользователя
 import os # Модуль для взаимодействия с ОС
@@ -32,14 +32,13 @@ def auth_decorator(func):
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+with open('config.json') as config_file:
+    config_data = json.load(config_file)
+
+app.config.update(config_data['mail_settings'])
 mail = Mail(app)
 
-app.config['MAIL_SERVER'] = "smtp.mail.ru"
-app.config['MAIL_PORT'] = 465
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'marina.test.vasileva@list.ru'
-app.config['MAIL_DEFAULT_SENDER'] = 'marina.test.vasileva@list.ru'
-app.config["MAIL_PASSWORD"] = 'U3toIOU*oad1'
 
 id = 1
 
@@ -50,6 +49,8 @@ class User:
         self.password = kargs["password"]
         self.token = kargs["token"]
         self.balance = 100
+        self.confirmed = kargs["confirmed"] if "confirmed" in kargs.keys() else False
+        self.confirm_token = kargs["confirm_token"] if "confirm_token" in kargs.keys() else ""
 
     def verify_password(self, password):
         return hashlib.md5(password.encode()).hexdigest() == self.password
@@ -63,9 +64,9 @@ def new_user():
     if email is None or password is None:
         abort(400) 
     user = User(id = id, email = email, password=hashlib.md5(password.encode()).hexdigest(), token=generate_token())
-    send_confirmation_letter(user)
+    user_sent_letter = send_confirmation_letter(user)
     with open("user.json", "w") as f:
-        json.dump(user.__dict__, f)
+        json.dump(user_sent_letter.__dict__, f)
     return jsonify({"id": user.id, 'email': user.email, "status" : 200 })
 
 @app.route('/login', methods = ['POST'])
@@ -138,6 +139,17 @@ def detele_call():
         json.dump(calls, f)
     return jsonify({"status": 200})
         
+@app.route('/confirm/<token>')
+def confirm_email(token):
+    user = load_user()
+    if token == user.confirm_token:
+        print(token)
+        user.confirmed = True
+        save_user(user)
+        return jsonify({"status": 200})
+    else:
+        return jsonify({"status": 404})
+
 
 
 @app.route('/test')
@@ -159,9 +171,14 @@ def save_user(user):
         json.dump(user.__dict__, f)
 
 def send_confirmation_letter(user):
-    msg = Message("Подтвердите регистрацию", recipients=[user.email])
-    msg.body = "Привет"
-    mail.send(msg)
+    try:
+        user.confirm_token = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for i in range(20)) 
+        msg = Message("Подтвердите регистрацию", recipients=[user.email])
+        msg.html = render_template("email_template.html", link="{}{}".format("http://localhost:5000/confirm/", user.confirm_token))
+        mail.send(msg)
+    except Exception as e:
+        print(str(e)) 
+    return user
 
 if __name__ == '__main__':
     app.run(debug=True)
