@@ -116,9 +116,10 @@ def edit_credentials():
     return response
 
 
-@app.route('/calls/get')
+@app.route('/calls/get', methods=["POST"])
 @auth_decorator
 def get_calls():
+    print(request.json)
     page =  request.json.get('paginate')["page"]
     per_page =  request.json.get('paginate')["per_page"]
     with open('calls.json') as f:
@@ -126,7 +127,7 @@ def get_calls():
     calls_to_send = []
     for i in range((page - 1) * per_page, (page * per_page)):
         calls_to_send.append(calls[i])
-    response = jsonify({"calls": calls_to_send})
+    response = jsonify({"calls": calls_to_send, "calls_number": len(calls)})
     return response
 
 @app.route('/calls/delete', methods = ["POST"])
@@ -182,6 +183,7 @@ def send_letter(to:list, subject:str, template:str, **props):
         return "ok"
     except Exception as e:
         return str(e)
+
         
 
 if __name__ == '__main__':
