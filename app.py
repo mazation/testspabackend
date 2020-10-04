@@ -8,6 +8,8 @@ import base64 # Модуль для шифрования/дешифровани�
 import json # Модуль для создания json
 import hashlib
 
+from flask_cors import CORS
+
 
 def auth_decorator(func):
     def wrapper():
@@ -32,6 +34,7 @@ def auth_decorator(func):
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
+CORS(app)
 
 with open('config.json') as config_file:
     config_data = json.load(config_file)
@@ -64,18 +67,19 @@ def new_user():
     if email is None or password is None:
         abort(400) 
     user = User(id = id, email = email, password=hashlib.md5(password.encode()).hexdigest(), token=generate_token())
-    user_sent_letter = send_confirmation_letter(user)
+    sent_letter = send_confirmation_letter(user)
+    user_sent_letter = sent_letter["user"] if sent_letter["message"] == "ok" else user    
     with open("user.json", "w") as f:
         json.dump(user_sent_letter.__dict__, f)
-    return jsonify({"id": user.id, 'email': user.email, "status" : 200 })
+    return jsonify({"id": user.id, 'email': user.email, "status" : 200, "token" : user_sent_letter.token})
 
 @app.route('/login', methods = ['POST'])
 def login():
     email = request.json.get('email')
     password = request.json.get('password')
     user_obj = load_user()
-    if user_obj.verify_password(password):
-        return jsonify({"token": user_obj.token, "status": 200})
+    if user_obj.verify_password(password) and user_obj.confirmed:
+        return jsonify({"token": user_obj.token, "status": 200, "confirmed": user_obj.confirmed})
     else:
         return jsonify({"status": 401})
 
@@ -146,16 +150,10 @@ def confirm_email(token):
         print(token)
         user.confirmed = True
         save_user(user)
-        return jsonify({"status": 200})
+        return jsonify({"status": 200, "token":user.confirm_token, "id": user.id})
     else:
         return jsonify({"status": 404})
 
-
-
-@app.route('/test')
-@auth_decorator
-def test():
-    return jsonify({"response": request.authorization})
 
 def generate_token():
     return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for i in range(20)) 
@@ -171,14 +169,20 @@ def save_user(user):
         json.dump(user.__dict__, f)
 
 def send_confirmation_letter(user):
+    user.confirm_token = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for i in range(20)) 
+    conf_link="{}{}".format("http://localhost:8080/confirm/", user.confirm_token)
+    message = send_letter([user.email], "Подтвердите регистрацию", "email_template.html", link=conf_link) 
+    return {"user": user, "message": message }
+
+def send_letter(to:list, subject:str, template:str, **props):
     try:
-        user.confirm_token = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for i in range(20)) 
-        msg = Message("Подтвердите регистрацию", recipients=[user.email])
-        msg.html = render_template("email_template.html", link="{}{}".format("http://localhost:5000/confirm/", user.confirm_token))
+        msg = Message(subject, recipients=to)
+        msg.html = render_template(template, **props)
         mail.send(msg)
+        return "ok"
     except Exception as e:
-        print(str(e)) 
-    return user
+        return str(e)
+        
 
 if __name__ == '__main__':
     app.run(debug=True)
