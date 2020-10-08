@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, g, abort, render_template, url_for, make_response # Импортируем библиотеки для работы Flaskimport json # Модуль для создания json
 from flask_mail import Mail, Message
-from flask_httpauth import HTTPBasicAuth # Импортируем библиотеку для автоматизации авторизации пользователя
 import secrets # Модуль для генерации случайных симоволов
 import string # Модуль для операций со строками
 import base64 # Модуль для шифрования/дешифрования в base64

@@ -2,6 +2,7 @@ aniso8601==8.0.0
 Click==7.0
 Flask==1.1.1
 Flask-HTTPAuth==3.3.0
+Flask-Mail==0.9.1
 flask-marshmallow==0.10.1
 Flask-RESTful==0.3.7
 Flask-SQLAlchemy==2.4.0
