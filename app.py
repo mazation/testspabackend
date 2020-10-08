@@ -1,7 +1,6 @@
-from flask import Flask, request, jsonify, g, abort, render_template, url_for # Импортируем библиотеки для работы Flaskimport json # Модуль для создания json
+from flask import Flask, request, jsonify, g, abort, render_template, url_for, make_response # Импортируем библиотеки для работы Flaskimport json # Модуль для создания json
 from flask_mail import Mail, Message
 from flask_httpauth import HTTPBasicAuth # Импортируем библиотеку для автоматизации авторизации пользователя
-import os # Модуль для взаимодействия с ОС
 import secrets # Модуль для генерации случайных симоволов
 import string # Модуль для операций со строками
 import base64 # Модуль для шифрования/дешифрования в base64
@@ -31,9 +30,7 @@ def auth_decorator(func):
     return wrapper
 
 
-
 app = Flask(__name__)
-basedir = os.path.abspath(os.path.dirname(__file__))
 CORS(app)
 
 with open('config.json') as config_file:
@@ -51,9 +48,12 @@ class User:
         self.email = kargs["email"]
         self.password = kargs["password"]
         self.token = kargs["token"]
-        self.balance = 100
         self.confirmed = kargs["confirmed"] if "confirmed" in kargs.keys() else False
         self.confirm_token = kargs["confirm_token"] if "confirm_token" in kargs.keys() else ""
+        self.name = kargs["name"] if "name" in kargs.keys() else ""
+        self.surname = kargs["surname"] if "surname" in kargs.keys() else ""
+        self.patronym = kargs["patronym"] if "patronym" in kargs.keys() else ""
+        self.phone = kargs["phone"] if "phone" in kargs.keys() else "79999999999"
 
     def verify_password(self, password):
         return hashlib.md5(password.encode()).hexdigest() == self.password
@@ -83,9 +83,9 @@ def login():
     else:
         return jsonify({"status": 401})
 
-@app.route('/users/edit', methods=['POST'])
 @auth_decorator
-def edit_user():
+@app.route('/users/edit/<id>', methods=['POST'])
+def edit_user(id):
     try:
         user = load_user()
         user.surname = request.json.get('surname')
@@ -93,7 +93,18 @@ def edit_user():
         user.patronym = request.json.get('patronym')
         user.phone = request.json.get('phone')
         save_user(user)
-        return jsonify({"status": 200})
+        return jsonify({"status": 200, "user": protect_password(user).__dict__})
+    except Exception as e:
+        response = jsonify({"error": str(e)})
+        response.status_code = 500
+        return response
+
+@auth_decorator
+@app.route('/users/get/<id>')
+def get_user(id):
+    try:
+        user = load_user()
+        return jsonify({"user": protect_password(user).__dict__})
     except Exception as e:
         response = jsonify({"error": str(e)})
         response.status_code = 500
@@ -104,7 +115,6 @@ def edit_user():
 def edit_credentials():
     new_email = request.json.get('email')
     new_password = request.json.get('password')
-
     try:
         user = load_user()
         user.email = new_email if new_email is not None else user.email
@@ -119,7 +129,6 @@ def edit_credentials():
 @app.route('/calls/get', methods=["POST"])
 @auth_decorator
 def get_calls():
-    print(request.json)
     page =  request.json.get('paginate')["page"]
     per_page =  request.json.get('paginate')["per_page"]
     with open('calls.json') as f:
@@ -130,30 +139,37 @@ def get_calls():
     response = jsonify({"calls": calls_to_send, "calls_number": len(calls)})
     return response
 
-@app.route('/calls/delete', methods = ["POST"])
-@auth_decorator
-def detele_call():
-    with open('calls.json') as f:
-        calls = json.load(f)
-    calls_to_delete = request.json.get("callsToDelete")
-    for call in calls:
-        print(call["callId"])
-        if int(call["callId"]) in calls_to_delete:
-            calls.pop(calls.index(call))
-    with open('calls.json', 'w') as f:
-        json.dump(calls, f)
-    return jsonify({"status": 200})
+# @app.route('/calls/delete', methods = ["POST"])
+# @auth_decorator
+# def detele_call():
+#     with open('calls.json') as f:
+#         calls = json.load(f)
+#     calls_to_delete = request.json.get("callsToDelete")
+#     for call in calls:
+#         if int(call["callId"]) in calls_to_delete:
+#             calls.pop(calls.index(call))
+#     with open('calls.json', 'w') as f:
+#         json.dump(calls, f)
+#     return jsonify({"status": 200})
         
 @app.route('/confirm/<token>')
 def confirm_email(token):
     user = load_user()
     if token == user.confirm_token:
-        print(token)
         user.confirmed = True
         save_user(user)
-        return jsonify({"status": 200, "token":user.confirm_token, "id": user.id})
+        response = make_response(jsonify({"token": user.confirm_token}), 200)
+        return response
     else:
-        return jsonify({"status": 404})
+        response = make_response(jsonify({"token": user.confirm_token}), 404)
+        return response
+
+@auth_decorator
+@app.route('/users/<id>/balance/get')
+def get_balance(id):
+    with open("balance.json") as f:
+        balance = json.load(f)
+    return jsonify({"balance": balance})
 
 
 def generate_token():
@@ -184,6 +200,11 @@ def send_letter(to:list, subject:str, template:str, **props):
     except Exception as e:
         return str(e)
 
+
+
+def protect_password(user):
+    del user.password
+    return user
         
 
 if __name__ == '__main__':
